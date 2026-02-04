@@ -1,0 +1,15 @@
+# Binaries and Objects
+*.o
+*.wasm
+*.data
+*.js.mem
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Extension Builds
+extension.zip
+
+# Logs
+*.log

@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "DoomGeneric GitHub Graph",
+  "description": "Plays Doom on your GitHub contribution graph",
+  "version": "1.0",
+  "icons": {
+    "48": "assets/icon48.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": [
+        "src/utils.js",
+        "src/doom/display-driver.js",
+        "src/doom/input-handler.js",
+        "src/doom/main.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/doom/engine.wasm",
+        "src/doom/worker.js",
+        "src/doom/frame.js",
+        "src/doom/engine.html"
+      ],
+      "matches": ["https://github.com/*"]
+    }
+  ],
+  "cross_origin_embedder_policy": {
+    "value": "require-corp"
+  },
+  "cross_origin_opener_policy": {
+    "value": "same-origin"
+  }
+}
