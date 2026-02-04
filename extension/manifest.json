@@ -3,9 +3,6 @@
   "name": "DoomGeneric GitHub Graph",
   "description": "Plays Doom on your GitHub contribution graph",
   "version": "1.0",
-  "icons": {
-    "48": "assets/icon48.png"
-  },
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },

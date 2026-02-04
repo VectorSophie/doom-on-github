@@ -63,6 +63,12 @@
         e.preventDefault();
         e.stopPropagation();
         
+        // Safety check for extension context invalidation
+        if (!chrome.runtime?.id) {
+            alert('Extension updated. Please refresh the page.');
+            return;
+        }
+
         const isChecked = button.getAttribute('aria-checked') === 'true';
         const newState = !isChecked;
         

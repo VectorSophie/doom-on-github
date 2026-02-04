@@ -7,6 +7,7 @@ CFLAGS += -Idoomgeneric/doomgeneric
 # -s ALLOW_MEMORY_GROWTH=1 : Allow heap to resize
 # -s "EXPORTED_FUNCTIONS=[...]" : Export specific C symbols (prefixed with _)
 LDFLAGS = -O3 -s STANDALONE_WASM=1 -s ALLOW_MEMORY_GROWTH=1 \
+-s ASYNCIFY \
 -s "EXPORTED_FUNCTIONS=['_main','_DG_Github_Init','_DG_Github_Input','_DG_Github_Framebuffer']" \
 -o engine.wasm
 DOOM_SRC_DIR = doomgeneric/doomgeneric

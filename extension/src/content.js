@@ -5,7 +5,6 @@
   let isRunning = false;
 
   async function init() {
-    // Wait for globals to be available
     if (!window.DoomHelpers) return;
 
     const findSettings = window.DoomHelpers.findContributionSettings;
@@ -22,6 +21,12 @@
     const menuItem = createMenu((enable) => {
         if (enable) {
             console.log('Doom: Starting...');
+            
+            if (!chrome.runtime?.id) {
+                console.error('DoomGeneric: Extension context invalidated.');
+                return;
+            }
+
             const wasmUrl = chrome.runtime.getURL('src/doom/engine.wasm');
             bootstrap(graphTable, wasmUrl).then(() => {
                 isRunning = true;

@@ -1,86 +1,92 @@
 let wasmInstance = null;
 let framebufferOffset = 0;
 let inputFn = null;
-let inputQueue = new Int32Array(new SharedArrayBuffer(1024)); // SAB for input if available
-let headIdx = 0; // Local head tracker
-let tailIdx = 0; // Local tail tracker (or use Atomics)
+let inputQueue = null; 
+
+let lastFrameTime = 0;
+let frameCount = 0;
+let lastLogTime = 0;
+
+function pumpEvents() {
+    if (inputFn && inputQueue) {
+        const head = Atomics.load(inputQueue, 0);
+        const tail = Atomics.load(inputQueue, 1);
+        
+        if (head !== tail) {
+             const offset = 2 + (tail * 2);
+             const key = inputQueue[offset];
+             const pressed = inputQueue[offset + 1];
+             inputFn(key, pressed);
+             const nextTail = (tail + 1) % 16;
+             Atomics.store(inputQueue, 1, nextTail);
+        }
+    }
+
+    const now = performance.now();
+    
+    if (now - lastLogTime > 2000) {
+        console.log(`Worker Heartbeat: Running... Frames pushed: ${frameCount}`);
+        lastLogTime = now;
+    }
+
+    if (now - lastFrameTime > 30) {
+        if (wasmInstance) {
+            const buffer = wasmInstance.exports.memory.buffer;
+            
+            const check = new Uint8Array(buffer, framebufferOffset, 10);
+
+            const fbSize = 2067;
+            const fbCopy = new Uint8Array(fbSize);
+            const src = new Uint8Array(buffer, framebufferOffset, fbSize);
+            fbCopy.set(src);
+            
+            self.postMessage({ type: 'FRAME', payload: fbCopy }, [fbCopy.buffer]);
+            frameCount++;
+        }
+        lastFrameTime = now;
+    }
+}
 
 self.onmessage = async (e) => {
   const { type, payload } = e.data;
 
   if (type === 'INIT') {
-    // If payload has SAB, use it
     if (payload.inputBuffer) {
         inputQueue = new Int32Array(payload.inputBuffer);
     }
 
     const imports = {
       env: {
-        emscripten_notify_memory_growth: () => {},
-        __syscall_unlinkat: () => 0,
-        __syscall_rmdir: () => 0,
-        __syscall_renameat: () => 0,
-        _emscripten_system: (cmd) => {
-            // HOOK: This is our chance to run logic inside the blocking loop!
-            
-            // 1. Poll Inputs from Shared Buffer (if we have one)
-            // Since onmessage is blocked, we can't receive normal messages.
-            // But if we shared a buffer, we can read it here.
-            
-            if (inputFn && inputQueue) {
-                // Check atomic flag or simple ring buffer?
-                // Simple ring: [0]=head, [1]=tail, [2+] data
-                const head = Atomics.load(inputQueue, 0);
-                const tail = Atomics.load(inputQueue, 1);
-                
-                if (head !== tail) {
-                     // Read events
-                     // Format: [key, pressed]
-                     const offset = 2 + (tail * 2);
-                     const key = inputQueue[offset];
-                     const pressed = inputQueue[offset + 1];
-                     
-                     // Inject to Engine
-                     inputFn(key, pressed);
-                     
-                     // Advance tail
-                     const nextTail = (tail + 1) % 16; // Max 16 events
-                     Atomics.store(inputQueue, 1, nextTail);
-                }
-            }
-
-            // 2. Poll Framebuffer? 
-            // We can postMessage here? 
-            // postMessage is async, but queuing it might work if the browser handles it in parallel?
-            // Actually, postMessage from Worker usually works even if busy, but the receiver (Main) needs to be free.
-            // Wait, if Worker is busy, it can SEND, but it can't RECEIVE.
-            // So we can send frames here!
-            
-            // Throttle frame updates (e.g. every 16ms)
-            const now = performance.now();
-            if (now - lastFrameTime > 30) {
-                if (wasmInstance) {
-                    const mem = new Uint8Array(wasmInstance.exports.memory.buffer);
-                    const fb = mem.subarray(framebufferOffset, framebufferOffset + 2067);
-                    // Copy buffer to avoid race condition if engine writes while we post
-                    self.postMessage({ type: 'FRAME', payload: fb }, [fb.slice().buffer]);
-                }
-                lastFrameTime = now;
-            }
-
-            // Return 0 to let engine continue
-            return 0;
+        emscripten_notify_memory_growth: () => { pumpEvents(); },
+        __syscall_unlinkat: () => { pumpEvents(); return 0; },
+        __syscall_rmdir: () => { pumpEvents(); return 0; },
+        __syscall_renameat: () => { pumpEvents(); return 0; },
+        _emscripten_system: (cmd) => { 
+            pumpEvents(); 
+            return 0; 
         }
       },
       wasi_snapshot_preview1: {
         proc_exit: (code) => { console.log('Exit:', code); },
         fd_write: (fd, iov, iovcnt, pnum) => {
-             // Maybe hook stdout too as a heartbeat?
-             return 0;
+             if (wasmInstance) {
+                 const mem = new DataView(wasmInstance.exports.memory.buffer);
+                 const ptr = mem.getUint32(iov, true);
+                 const len = mem.getUint32(iov + 4, true);
+                 
+                 const bytes = new Uint8Array(wasmInstance.exports.memory.buffer, ptr, len);
+                 const str = new TextDecoder("utf-8").decode(bytes);
+                 console.log('Doom Stdout:', str.trim());
+                 
+                 mem.setUint32(pnum, len, true);
+             }
+             
+             pumpEvents();
+             return 0; 
         },
-        fd_read: () => 0,
-        fd_close: () => 0,
-        fd_seek: () => 0
+        fd_read: () => { pumpEvents(); return 0; },
+        fd_close: () => { pumpEvents(); return 0; },
+        fd_seek: () => { pumpEvents(); return 0; }
       }
     };
 
@@ -91,16 +97,26 @@ self.onmessage = async (e) => {
       wasmInstance = module.instance;
       
       const exports = wasmInstance.exports;
-      framebufferOffset = exports.DG_Github_Framebuffer.value;
+      
+      if (exports.DG_Github_Framebuffer) {
+          framebufferOffset = exports.DG_Github_Framebuffer.value;
+          console.log('Worker: Framebuffer found at offset:', framebufferOffset);
+      } else {
+          console.error('Worker: DG_Github_Framebuffer export NOT found!');
+      }
+
       inputFn = exports.DG_Github_Input;
       const initFn = exports.DG_Github_Init;
       const mainFn = exports.main;
 
+      console.log('Worker: Initialized. Starting Engine...');
+
       if (initFn) initFn();
       
-      console.log('Worker: Starting Main (Blocking)...');
       setTimeout(() => {
+          console.log('Worker: Entering Main Loop...');
           mainFn();
+          console.log('Worker: Main Loop Exited (Unexpected)');
       }, 0);
       
     } catch (err) {
@@ -108,5 +124,3 @@ self.onmessage = async (e) => {
     }
   }
 };
-
-let lastFrameTime = 0;
