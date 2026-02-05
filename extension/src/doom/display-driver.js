@@ -51,6 +51,7 @@
         const labelCell = document.createElement('td');
         labelCell.className = 'ContributionCalendar-label';
         labelCell.style.width = '30px';
+        labelCell.style.position = 'relative';
         newRow.appendChild(labelCell);
         
         this.tableBody.appendChild(newRow);
@@ -68,13 +69,15 @@
             cell = document.createElement('td');
             cell.className = 'ContributionCalendar-day';
             cell.style.width = '10px';
-            cell.style.height = '10px';
-            cell.style.padding = '0';
-            cell.style.border = '1px solid rgba(27, 31, 35, 0.06)';
-            cell.style.borderRadius = '2px';
-            
-            cell.dataset.viewComponent = 'true';
+            cell.setAttribute('data-ix', x.toString());
+            cell.setAttribute('tabindex', '-1');
+            cell.setAttribute('aria-selected', 'false');
             cell.setAttribute('role', 'gridcell');
+            cell.setAttribute('data-view-component', 'true');
+            
+            // Add attributes for consistent GitHub styling (borders/outlines)
+            cell.setAttribute('id', `contribution-day-component-${y}-${x}`);
+            cell.setAttribute('aria-describedby', 'contribution-graph-legend-level-0');
             
             row.appendChild(cell);
           }
