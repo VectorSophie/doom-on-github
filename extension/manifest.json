@@ -22,6 +22,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "src/doom/engine.js",
         "src/doom/engine.wasm",
         "src/doom/worker.js",
         "src/doom/frame.js",

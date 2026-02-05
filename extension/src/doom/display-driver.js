@@ -36,13 +36,21 @@
     }
 
     expandGrid() {
+      // Hide the legend and footer to clear space
+      const footer = document.querySelector('.contrib-footer');
+      if (footer) footer.style.display = 'none';
+      const legend = document.querySelector('.ContributionCalendar-label--legend');
+      if (legend) legend.parentElement.style.display = 'none';
+
+      // Ensure we have 39 rows (GitHub usually has 7)
       while (this.tableBody.children.length < this.height) {
         const newRow = document.createElement('tr');
         newRow.style.height = '10px';
         
+        // Add dummy label cell
         const labelCell = document.createElement('td');
         labelCell.className = 'ContributionCalendar-label';
-        labelCell.style.position = 'relative';
+        labelCell.style.width = '30px';
         newRow.appendChild(labelCell);
         
         this.tableBody.appendChild(newRow);
@@ -60,15 +68,18 @@
             cell = document.createElement('td');
             cell.className = 'ContributionCalendar-day';
             cell.style.width = '10px';
-            cell.dataset.viewComponent = 'true';
+            cell.style.height = '10px';
+            cell.style.padding = '0';
+            cell.style.border = '1px solid rgba(27, 31, 35, 0.06)';
+            cell.style.borderRadius = '2px';
             
+            cell.dataset.viewComponent = 'true';
             cell.setAttribute('role', 'gridcell');
-            cell.setAttribute('tabindex', '-1');
-            cell.setAttribute('aria-selected', 'false');
             
             row.appendChild(cell);
           }
           
+          cell.style.backgroundColor = ''; // Clear any inline styles
           cell.dataset.level = '0';
           this.cells[y * this.width + x] = cell;
         }
