@@ -1,6 +1,5 @@
 # Binaries and Objects
 *.o
-*.wasm
 *.data
 *.js.mem
 
