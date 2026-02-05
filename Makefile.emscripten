@@ -1,15 +1,14 @@
-CC = emcc
-CFLAGS = -O3 -Wall -Wno-unused-variable -Wno-unused-function -Wno-unused-value -DDOOMGENERIC
+EMSDK_PYTHON = C:/Users/PC/emsdk/python/3.13.3_64bit/python.exe
+EMCC = C:/Users/PC/emsdk/upstream/emscripten/emcc.py
+CC = $(EMSDK_PYTHON) $(EMCC)
+CFLAGS = -O3 -Wall -Wno-unused-variable -Wno-unused-function -Wno-unused-value -DDOOMGENERIC -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200
 # Include path for Doom headers
 CFLAGS += -Idoomgeneric/doomgeneric
 # Emscripten Linker Flags
 # -s STANDALONE_WASM=1 : No JS glue, pure WASM
 # -s ALLOW_MEMORY_GROWTH=1 : Allow heap to resize
 # -s "EXPORTED_FUNCTIONS=[...]" : Export specific C symbols (prefixed with _)
-LDFLAGS = -O3 -s STANDALONE_WASM=1 -s ALLOW_MEMORY_GROWTH=1 \
--s ASYNCIFY \
--s "EXPORTED_FUNCTIONS=['_main','_DG_Github_Init','_DG_Github_Input','_DG_Github_Framebuffer']" \
--o engine.wasm
+LDFLAGS = -O2 -g -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY --embed-file doom1.wad -s "EXPORTED_FUNCTIONS=['_main','_DG_Github_Init','_DG_Github_Input','_DG_Github_Framebuffer','_DG_GetFramebufferPtr','_DG_Github_FB_Read','_doomgeneric_Tick']" -s "EXPORTED_RUNTIME_METHODS=['wasmMemory','HEAPU8','HEAP32']" -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s ENVIRONMENT=worker -s MODULARIZE=1 -s EXPORT_NAME='DoomModule' -o engine.js
 DOOM_SRC_DIR = doomgeneric/doomgeneric
 # Explicit list of Doom Engine Sources + DoomGeneric Core
 # Excludes backend-specific files (sdl, win, etc.)

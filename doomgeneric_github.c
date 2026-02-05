@@ -1,8 +1,17 @@
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
+#include <emscripten.h>
+
+/* Timer Implementation via EM_JS - Necessary for high-resolution timing in WASM */
+EM_JS(uint32_t, get_host_ticks_ms, (void), {
+    if (!self.startTime) self.startTime = performance.now();
+    return Math.floor(performance.now() - self.startTime);
+});
 
 /* DoomGeneric API */
-extern void D_DoomMain(void);
+extern void doomgeneric_Create(int argc, char **argv);
+extern void doomgeneric_Tick(void);
 extern void DG_Init(void);
 extern void DG_DrawFrame(void);
 extern void DG_SleepMs(uint32_t ms);
@@ -22,6 +31,17 @@ extern uint32_t* DG_ScreenBuffer;
 
 /* Exported Storage */
 uint8_t DG_Github_Framebuffer[GH_BUFFER_SIZE];
+
+EMSCRIPTEN_KEEPALIVE
+uint8_t* DG_GetFramebufferPtr(void) {
+    return DG_Github_Framebuffer;
+}
+
+EMSCRIPTEN_KEEPALIVE
+uint8_t DG_Github_FB_Read(int i) {
+    if (i < 0 || i >= GH_BUFFER_SIZE) return 0;
+    return DG_Github_Framebuffer[i];
+}
 
 /* Internal State */
 typedef struct {
@@ -51,22 +71,18 @@ int DG_Github_Input(int key, int pressed) {
     return 0;
 }
 
-int main(void) {
+int main(int argc, char** argv) {
     DG_Github_Init();
-    D_DoomMain();
+    doomgeneric_Create(argc, argv);
     return 0;
 }
 
 void DG_Init(void) {
-    /* Backend initialization not required */
 }
 
 void DG_DrawFrame(void) {
     if (!DG_ScreenBuffer) return;
 
-    /* Integer scaling factors (fixed point 16.16 could be used, but simple float or ratio is fine) */
-    /* Using integer math for strict determinism and minimal dependencies */
-    
     for (int y = 0; y < GH_RES_Y; y++) {
         int src_y = (y * DOOMGENERIC_RESY) / GH_RES_Y;
         if (src_y >= DOOMGENERIC_RESY) src_y = DOOMGENERIC_RESY - 1;
@@ -77,18 +93,23 @@ void DG_DrawFrame(void) {
 
             uint32_t pixel = DG_ScreenBuffer[src_y * DOOMGENERIC_RESX + src_x];
             
-            /* Extract RGB (Assume ARGB/XRGB) */
+            // Format: 0x00RRGGBB (XRGB)
             uint32_t r = (pixel >> 16) & 0xFF;
             uint32_t g = (pixel >> 8) & 0xFF;
             uint32_t b = pixel & 0xFF;
 
-            /* Luma approximation: (R + 2G + B) / 4 */
+            // Simplified Luma: (R + 2G + B) / 4
             uint32_t luma = (r + (g << 1) + b) >> 2;
 
-            /* Quantize 0-255 to 0-4 */
-            /* (luma * 5) / 256 */
-            uint8_t val = (uint8_t)((luma * GH_COLOR_LEVELS) >> 8);
-            if (val >= GH_COLOR_LEVELS) val = GH_COLOR_LEVELS - 1;
+            // Map 0-255 to 0-4 (GitHub Levels)
+            // GitHub Level 0: Background/Empty (#161b22)
+            // Level 1-4: Green shades
+            uint8_t val = 0;
+            if (luma > 200) val = 4;
+            else if (luma > 140) val = 3;
+            else if (luma > 80) val = 2;
+            else if (luma > 35) val = 1; // High enough to distinguish from background
+            else val = 0;
 
             DG_Github_Framebuffer[y * GH_RES_X + x] = val;
         }
@@ -96,12 +117,10 @@ void DG_DrawFrame(void) {
 }
 
 void DG_SleepMs(uint32_t ms) {
-    /* Host controls timing */
 }
 
 uint32_t DG_GetTicksMs(void) {
-    /* Deterministic time zero */
-    return 0;
+    return get_host_ticks_ms();
 }
 
 int DG_GetKey(int* pressed, unsigned char* key) {
@@ -114,5 +133,4 @@ int DG_GetKey(int* pressed, unsigned char* key) {
 }
 
 void DG_SetWindowTitle(const char * title) {
-    /* No windowing system */
 }

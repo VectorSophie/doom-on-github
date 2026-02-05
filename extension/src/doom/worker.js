@@ -1,4 +1,4 @@
-let wasmInstance = null;
+let DoomModuleInstance = null;
 let framebufferOffset = 0;
 let inputFn = null;
 let inputQueue = null; 
@@ -6,42 +6,67 @@ let inputQueue = null;
 let lastFrameTime = 0;
 let frameCount = 0;
 let lastLogTime = 0;
+let startTime = performance.now();
 
-function pumpEvents() {
-    if (inputFn && inputQueue) {
-        const head = Atomics.load(inputQueue, 0);
-        const tail = Atomics.load(inputQueue, 1);
-        
-        if (head !== tail) {
-             const offset = 2 + (tail * 2);
-             const key = inputQueue[offset];
-             const pressed = inputQueue[offset + 1];
-             inputFn(key, pressed);
-             const nextTail = (tail + 1) % 16;
-             Atomics.store(inputQueue, 1, nextTail);
-        }
-    }
+// Load the Emscripten-generated JS glue
+importScripts('engine.js');
 
+function pumpEvents(source) {
     const now = performance.now();
     
     if (now - lastLogTime > 2000) {
-        console.log(`Worker Heartbeat: Running... Frames pushed: ${frameCount}`);
+        console.log(`Worker Heartbeat: Running... Frames pushed: ${frameCount}. Last source: ${source}`);
         lastLogTime = now;
     }
 
     if (now - lastFrameTime > 30) {
-        if (wasmInstance) {
-            const buffer = wasmInstance.exports.memory.buffer;
+        const activeModule = DoomModuleInstance || self.Module;
+        if (activeModule && framebufferOffset) {
+            // Find the buffer wherever it lives
+            let buffer = null;
+            if (activeModule.HEAPU8) buffer = activeModule.HEAPU8.buffer;
+            else if (activeModule.heapU8) buffer = activeModule.heapU8.buffer;
+            else if (activeModule.wasmMemory) buffer = activeModule.wasmMemory.buffer;
+            else if (activeModule.asm && activeModule.asm.memory) buffer = activeModule.asm.memory.buffer;
+            // Handle MODULARIZE weirdness where exports might be direct properties
+            else if (activeModule.memory) buffer = activeModule.memory.buffer;
             
-            const check = new Uint8Array(buffer, framebufferOffset, 10);
+            if (buffer) {
+                const fbSize = 2067;
+                const src = new Uint8Array(buffer, framebufferOffset, fbSize);
+                
+                // Check if we actually have pixel data
+                let hasData = false;
+                for (let i = 0; i < 50; i++) { if (src[i] !== 0) { hasData = true; break; } }
+                
+                const fbCopy = new Uint8Array(fbSize);
+                fbCopy.set(src);
+                
+                self.postMessage({ type: 'FRAME', payload: fbCopy }, [fbCopy.buffer]);
+                frameCount++;
 
-            const fbSize = 2067;
-            const fbCopy = new Uint8Array(fbSize);
-            const src = new Uint8Array(buffer, framebufferOffset, fbSize);
-            fbCopy.set(src);
-            
-            self.postMessage({ type: 'FRAME', payload: fbCopy }, [fbCopy.buffer]);
-            frameCount++;
+                if (hasData && frameCount % 35 === 0) {
+                    console.log(`Worker: Pushing frame ${frameCount} (pixel data detected)`);
+                }
+            } else {
+                // Final fallback: check for global wasmMemory if not on Module
+                if (typeof wasmMemory !== 'undefined') {
+                    buffer = wasmMemory.buffer;
+                    // Re-run the logic above if found
+                    if (buffer) {
+                        const fbSize = 2067;
+                        const src = new Uint8Array(buffer, framebufferOffset, fbSize);
+                        const fbCopy = new Uint8Array(fbSize);
+                        fbCopy.set(src);
+                        self.postMessage({ type: 'FRAME', payload: fbCopy }, [fbCopy.buffer]);
+                        frameCount++;
+                        return;
+                    }
+                }
+                if (frameCount === 0 && now - startTime > 5000 && (Math.floor(now) % 1000 < 50)) {
+                    console.error('Worker: Still no buffer found. Keys on Module:', Object.keys(activeModule));
+                }
+            }
         }
         lastFrameTime = now;
     }
@@ -51,76 +76,82 @@ self.onmessage = async (e) => {
   const { type, payload } = e.data;
 
   if (type === 'INIT') {
+    console.log('Worker: Initializing via Emscripten Glue...');
+    
     if (payload.inputBuffer) {
         inputQueue = new Int32Array(payload.inputBuffer);
     }
 
-    const imports = {
-      env: {
-        emscripten_notify_memory_growth: () => { pumpEvents(); },
-        __syscall_unlinkat: () => { pumpEvents(); return 0; },
-        __syscall_rmdir: () => { pumpEvents(); return 0; },
-        __syscall_renameat: () => { pumpEvents(); return 0; },
-        _emscripten_system: (cmd) => { 
-            pumpEvents(); 
-            return 0; 
-        }
-      },
-      wasi_snapshot_preview1: {
-        proc_exit: (code) => { console.log('Exit:', code); },
-        fd_write: (fd, iov, iovcnt, pnum) => {
-             if (wasmInstance) {
-                 const mem = new DataView(wasmInstance.exports.memory.buffer);
-                 const ptr = mem.getUint32(iov, true);
-                 const len = mem.getUint32(iov + 4, true);
-                 
-                 const bytes = new Uint8Array(wasmInstance.exports.memory.buffer, ptr, len);
-                 const str = new TextDecoder("utf-8").decode(bytes);
-                 console.log('Doom Stdout:', str.trim());
-                 
-                 mem.setUint32(pnum, len, true);
-             }
-             
-             pumpEvents();
-             return 0; 
+    // Configure the Module
+    const Module = {
+        noInitialRun: true,
+        locateFile: (path) => {
+            console.log('Worker: Locating file:', path);
+            return path + '?v=' + Date.now();
         },
-        fd_read: () => { pumpEvents(); return 0; },
-        fd_close: () => { pumpEvents(); return 0; },
-        fd_seek: () => { pumpEvents(); return 0; }
-      }
+        print: (text) => console.log(`[Doom] ${text}`),
+        printErr: (text) => console.error(`[Doom Error] ${text}`),
+        onRuntimeInitialized: () => {
+            console.log('Worker: Runtime Initialized.');
+            
+            // In MODULARIZE mode, Emscripten populates the object passed to the factory
+            const exports = Module;
+            
+            const getPtr = exports._DG_GetFramebufferPtr;
+            const initFn = exports._DG_Github_Init;
+            const mainFn = exports._main;
+            const tickFn = exports._doomgeneric_Tick;
+            inputFn = exports._DG_Github_Input;
+
+            if (getPtr) {
+                framebufferOffset = getPtr();
+                console.log('Worker: Framebuffer address:', framebufferOffset);
+            }
+
+            if (initFn) {
+                console.log('Worker: Calling DG_Github_Init...');
+                initFn();
+            }
+
+            console.log('Worker: Starting Main...');
+            try {
+                if (!Module._main_called) {
+                    Module._main_called = true;
+                    // Assignment for pumpEvents
+                    DoomModuleInstance = Module;
+                    mainFn(0, 0);
+                }
+            } catch (e) {
+                console.log('Worker: Main returned:', e);
+            }
+
+            if (tickFn) {
+                console.log('Worker: Starting Tick Loop...');
+                if (self.tickInterval) clearInterval(self.tickInterval);
+                self.tickInterval = setInterval(() => {
+                    try {
+                        tickFn();
+                        pumpEvents('tick');
+                    } catch (e) {
+                        console.error('Tick Error:', e);
+                    }
+                }, 1000 / 35);
+            }
+        }
     };
 
     try {
-      console.log('Worker: Fetching WASM...', payload.wasmUrl);
-      const response = await fetch(payload.wasmUrl);
-      const module = await WebAssembly.instantiateStreaming(response, imports);
-      wasmInstance = module.instance;
-      
-      const exports = wasmInstance.exports;
-      
-      if (exports.DG_Github_Framebuffer) {
-          framebufferOffset = exports.DG_Github_Framebuffer.value;
-          console.log('Worker: Framebuffer found at offset:', framebufferOffset);
-      } else {
-          console.error('Worker: DG_Github_Framebuffer export NOT found!');
-      }
-
-      inputFn = exports.DG_Github_Input;
-      const initFn = exports.DG_Github_Init;
-      const mainFn = exports.main;
-
-      console.log('Worker: Initialized. Starting Engine...');
-
-      if (initFn) initFn();
-      
-      setTimeout(() => {
-          console.log('Worker: Entering Main Loop...');
-          mainFn();
-          console.log('Worker: Main Loop Exited (Unexpected)');
-      }, 0);
-      
+        // CRITICAL: In MODULARIZE mode, the actual "live" module is the one 
+        // returned by the promise. The 'Module' object we pass is just configuration.
+        const instance = await DoomModule(Module);
+        DoomModuleInstance = instance;
+        console.log('Worker: Module instance acquired. Keys:', Object.keys(DoomModuleInstance).filter(k => k.startsWith('HEAP') || k === 'wasmMemory'));
     } catch (err) {
-      console.error('DoomGeneric: Failed to load', err);
+        console.error('Worker: Failed to load DoomModule', err);
     }
+  }
+
+  if (type === 'INPUT' && inputFn) {
+      inputFn(payload.key, payload.pressed);
   }
 };
