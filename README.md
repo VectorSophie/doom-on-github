@@ -2,9 +2,7 @@
 
 A high-performance port of Doom designed specifically to run on the GitHub contribution graph (53x39 resolution). Built with WebAssembly and DoomGeneric.
 
-![Doom on Github](https://github.com/VectorSophie/doom-on-github/raw/master/doomgeneric/screenshots/sdl.png) <!-- Note: Replace with actual screenshot if available -->
-
-## 🚀 Overview
+## Overview
 
 This project runs the Doom engine inside a Web Worker and renders its output directly onto the GitHub contribution grid. It leverages **DoomGeneric** for portability and **Emscripten** for WebAssembly compilation.
 
@@ -16,7 +14,7 @@ This project runs the Doom engine inside a Web Worker and renders its output dir
 
 ---
 
-## 🛠 Architecture
+## Architecture
 
 ### 1. The Engine (`doomgeneric_github.c`)
 Custom `doomgeneric` backend tailored for the GitHub environment:
@@ -37,7 +35,7 @@ Acts as the "Host OS" for the WASM module:
 
 ---
 
-## 🏗 Build & Test
+## Build & Test
 
 ### Prerequisites
 - **Emscripten SDK (EMSDK)**: Required for compiling the C source to WASM.
@@ -60,7 +58,7 @@ make -f Makefile.emscripten
 
 ---
 
-## 📋 ABI Specification
+## ABI Specification
 
 ### Exported Symbols
 | Symbol | Type | Description |
@@ -82,10 +80,7 @@ make -f Makefile.emscripten
 
 ---
 
-## 📜 Acknowledgments
+## Acknowledgments
 - **DoomGeneric**: The foundation for this portable Doom implementation.
 - **ozkl**: Original creator of the `doomgeneric` framework.
 - **id Software**: The legends who started it all.
-
----
-*Created by the DeepMind Advanced Agentic Coding Team.*
