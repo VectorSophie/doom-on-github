@@ -8,6 +8,7 @@ This project runs the Doom engine inside a Web Worker and renders its output dir
 
 ### Key Features
 - **Headless Execution**: Bypasses SDL and DOM dependencies to run entirely within a Web Worker.
+- **Cinematic Rendering**: No-border grid expansion for a seamless, pixel-perfect visual experience on GitHub.
 - **Dynamic Downscaling**: Real-time downsampling from 320x200 (Doom internal) to 53x39 (GitHub grid).
 - **High Contrast Mapping**: Custom luma-to-contribution-level mapping ensuring deep shadows map to the GitHub "no contribution" color.
 - **Low Latency Input**: Asynchronous key event injection via a ring buffer.
