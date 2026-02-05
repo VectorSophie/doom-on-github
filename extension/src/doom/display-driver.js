@@ -75,14 +75,15 @@
             cell.setAttribute('role', 'gridcell');
             cell.setAttribute('data-view-component', 'true');
             
-            // Add attributes for consistent GitHub styling (borders/outlines)
             cell.setAttribute('id', `contribution-day-component-${y}-${x}`);
             cell.setAttribute('aria-describedby', 'contribution-graph-legend-level-0');
             
             row.appendChild(cell);
           }
           
-          cell.style.backgroundColor = ''; // Clear any inline styles
+          cell.style.outline = 'none';
+          cell.style.border = 'none';
+          cell.style.backgroundColor = '';
           cell.dataset.level = '0';
           this.cells[y * this.width + x] = cell;
         }
