@@ -92,21 +92,6 @@
 
     update(buffer) {
       if (!this.cells) return;
-      
-      if (!this.debugLogged) {
-          let hasData = false;
-          for(let k=0; k<buffer.length; k++) {
-              if (buffer[k] > 0) {
-                  console.log('DisplayDriver: First non-zero frame received!', buffer);
-                  hasData = true;
-                  this.debugLogged = true;
-                  break;
-              }
-          }
-          if (!hasData && Math.random() < 0.01) {
-              console.log('DisplayDriver: Still receiving zeros...');
-          }
-      }
 
       for (let i = 0; i < buffer.length; i++) {
         const val = buffer[i];
