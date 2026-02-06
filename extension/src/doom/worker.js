@@ -130,6 +130,24 @@ self.onmessage = async (e) => {
                 if (self.tickInterval) clearInterval(self.tickInterval);
                 self.tickInterval = setInterval(() => {
                     try {
+                        // Read from SAB Input Queue if available
+                        if (inputQueue && inputFn) {
+                            let head = Atomics.load(inputQueue, 0);
+                            let tail = Atomics.load(inputQueue, 1);
+                            if (tail !== head) {
+                                console.log('Worker: Processing input from SAB');
+                            }
+                            while (tail !== head) {
+                                const offset = 2 + (tail * 2);
+                                const key = inputQueue[offset];
+                                const pressed = inputQueue[offset + 1];
+                                inputFn(key, pressed);
+                                tail = (tail + 1) % 16;
+                                Atomics.store(inputQueue, 1, tail);
+                                head = Atomics.load(inputQueue, 0);
+                            }
+                        }
+
                         tickFn();
                         pumpEvents('tick');
                     } catch (e) {

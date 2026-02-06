@@ -11,14 +11,15 @@
         ArrowLeft: 0xac,
         ArrowUp: 0xad,
         ArrowDown: 0xaf,
-        Control: 0x80, 
-        ' ': 0x80,     
+        Control: 0xa3, // KEY_FIRE
+        ' ': 0xa2,     // KEY_USE
         Enter: 13,
         Escape: 27,
         w: 119,
         a: 97,
         s: 115,
-        d: 100
+        d: 100,
+        Shift: 0x80+0x36 // KEY_RSHIFT
       };
 
       this.onKeyDown = this.onKeyDown.bind(this);
