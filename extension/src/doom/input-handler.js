@@ -19,7 +19,11 @@
         a: 97,
         s: 115,
         d: 100,
-        Shift: 0x80+0x36 // KEY_RSHIFT
+        Shift: 0xb6,   // KEY_RSHIFT
+        Alt: 0xb8,     // KEY_RALT
+        m: 109,
+        ',': 44,
+        '.': 46
       };
 
       this.onKeyDown = this.onKeyDown.bind(this);
