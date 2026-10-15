@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Doom Pipeline Test (iframe + SAB, mirrors the real extension)</title>
+  <style>
+    body { background: #0d1117; color: #c9d1d9; font-family: monospace; display: flex; flex-direction: column; align-items: center; }
+    #grid { display: grid; grid-template-columns: repeat(53, 10px); gap: 1px; margin-top: 10px; }
+    #grid div { width: 10px; height: 10px; background: #161b22; }
+    #grid div[data-level="1"] { background: #0e4429; }
+    #grid div[data-level="2"] { background: #006d32; }
+    #grid div[data-level="3"] { background: #26a641; }
+    #grid div[data-level="4"] { background: #39d353; }
+    #status { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Pipeline Test (iframe + SharedArrayBuffer, same as the real extension)</h1>
+  <div id="status">Loading...</div>
+  <div id="grid"></div>
+  <div style="margin-top:20px;">Click the grid, then use Arrows / Ctrl (fire) / Space (use) / Enter / Escape.</div>
+
+  <script src="input-handler.js"></script>
+  <script>
+    const WIDTH = 53, HEIGHT = 60;
+    const grid = document.getElementById('grid');
+    const cells = [];
+    for (let i = 0; i < WIDTH * HEIGHT; i++) {
+      const d = document.createElement('div');
+      grid.appendChild(d);
+      cells.push(d);
+    }
+    const cache = new Uint8Array(WIDTH * HEIGHT).fill(255);
+
+    const status = document.getElementById('status');
+    const iframe = document.createElement('iframe');
+    iframe.src = 'engine.html';
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const input = new DoomHelpers.InputHandler(document.body);
+    input.init();
+    window.__input = input; // debug hook
+
+    iframe.onload = () => {
+      status.textContent = 'iframe loaded, sending INIT...';
+      const frameWindow = iframe.contentWindow;
+
+      input.onInput((key, pressed) => {
+        frameWindow.postMessage({ type: 'INPUT', payload: { key, pressed } }, '*');
+      });
+
+      window.__debugLog = [];
+      window.addEventListener('message', (e) => {
+        if (e.data.type === 'DEBUG') {
+          window.__debugLog.push(e.data.payload);
+          if (window.__debugLog.length > 500) window.__debugLog.shift();
+        }
+        if (e.data.type === 'FRAME') {
+          const buffer = new Uint8Array(e.data.payload);
+          status.textContent = 'Running (frame #' + (window.__fc = (window.__fc||0)+1) + ')';
+          for (let i = 0; i < buffer.length; i++) {
+            const val = buffer[i];
+            if (val !== cache[i]) {
+              cells[i].setAttribute('data-level', val.toString());
+              cache[i] = val;
+            }
+          }
+        }
+      });
+
+      frameWindow.postMessage({ type: 'INIT', payload: { wasmUrl: 'engine.wasm' } }, '*');
+    };
+  </script>
+</body>
+</html>
